@@ -92,6 +92,7 @@ textarea{min-height:76px;resize:vertical}
 .btn.link{background:none;color:var(--accent);padding:6px 4px;font-weight:500}
 .btn.danger{background:none;color:var(--warn);padding:6px 8px;font-weight:500}
 .btn.small{padding:5px 10px;font-size:.85rem}
+.row > .editbox{flex:1 1 100%}
 .icon{border:1px solid var(--line);background:var(--surface);border-radius:8px;min-width:36px;height:36px;cursor:pointer;flex:none}
 .empty{color:var(--muted);background:var(--sunk);border-radius:12px;padding:18px;text-align:center}
 .tip{border-left:3px solid var(--accent);padding:4px 12px;color:var(--muted);font-size:.9rem}
@@ -146,8 +147,12 @@ textarea{min-height:76px;resize:vertical}
   var RSVP = ['Bekliyor','Geliyor','Gelmiyor'];
   var PRIO = ['Şart','Olsa iyi','Sonra'];
   var TITLES = {bugun:'Bugün', plan:'Plan', para:'Para', liste:'Listeler', ayar:'Ayarlar'};
+  // Takı türü -> fiyat anahtarı ve birim (bilezik gram üzerinden, 22 ayar)
+  var GOLD = {'Çeyrek altın':{k:'ceyrek',u:'adet'},'Yarım altın':{k:'yarim',u:'adet'},'Tam altın':{k:'tam',u:'adet'},'Gram altın':{k:'gram',u:'gram'},'Bilezik':{k:'bilezik22',u:'gram'}};
+  var GOLDNAMES = {ceyrek:'Çeyrek altın',yarim:'Yarım altın',tam:'Tam altın',gram:'Gram altın (24 ayar)',bilezik22:'22 ayar bilezik (gram)'};
+  var PRICE_URLS = ['https://raw.githubusercontent.com/fatihdlcgl42-jpg/dugun-plani/main/prices.json','prices.json'];
 
-  var S = {events:[], phases:[], tasks:[], expenses:[], vendors:[], guests:[], gifts:[], ceyiz:[], payments:[], schedule:[], people:null, meta:{}, ready:false};
+  var S = {events:[], phases:[], tasks:[], expenses:[], vendors:[], guests:[], gifts:[], ceyiz:[], payments:[], schedule:[], people:null, meta:{}, market:null, goldManual:{}, ready:false};
   var V = {sec:'bugun', ev:null, planView:'isler', paraView:'odemeler', listeView:'davetli', whoF:'Hepsi', expF:'Hepsi', guestEv:'Hepsi', guestSide:'Hepsi', roomF:'Hepsi', q:''};
   var open = {}, editing = null, adding = null, editEv = {}, confirmDel = null, payFor = null, calFor = null, pendingRender = false;
   try { var saved = JSON.parse(localStorage.getItem('dp-view')||'{}'); Object.keys(saved).forEach(function(k){ if(k in V && k!=='q') V[k]=saved[k]; }); } catch(e){}
@@ -180,6 +185,31 @@ textarea{min-height:76px;resize:vertical}
   function upd(c,id,data,msg){ return col(c).doc(id).update(data).then(function(){ if(msg) toast(msg); }, fail); }
   function delBtn(key, label){ return '<button type="button" class="btn danger" data-del="'+key+'">'+(confirmDel===key?'Silinsin mi? Tekrar dokun':(label||'Sil'))+'</button>'; }
 
+  // ---------- Altın fiyatları ----------
+  function isManual(k,side){ return Number(((S.goldManual||{})[k]||{})[side])>0; }
+  function price(k,side){
+    if(isManual(k,side)) return Number(S.goldManual[k][side]);
+    var it=S.market&&S.market.items&&S.market.items[k]; return it&&Number(it[side])>0?Number(it[side]):0;
+  }
+  function goldNow(type, qty){ var gd=GOLD[type], p=gd&&price(gd.k,'buy'); return p&&Number(qty)>0 ? p*Number(qty) : 0; }
+  function giftValue(g){ if(Number(g.value)>0) return {v:Number(g.value),auto:false}; var v=goldNow(g.type,g.qty); return {v:v,auto:v>0}; }
+  function fmtQty(n){ return (Number(n)||0).toLocaleString('tr-TR',{maximumFractionDigits:2}); }
+  function fdt(s){ var d=new Date(s); return isNaN(d) ? '' : d.toLocaleString('tr-TR',{day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}); }
+  function goldToExpense(o){
+    var gd=GOLD[o.goldType]||{u:'adet'};
+    return {item:fmtQty(o.qty)+(gd.u==='gram'?' gr ':' adet ')+o.goldType+(o.shop?' · '+o.shop:''), amount:Number(o.amount)||0, event:o.event, category:'Takı', paidBy:o.paidBy, date:o.date, note:o.note, goldType:o.goldType, qty:Number(o.qty)||0, unitPrice:Number(o.unitPrice)||0, shop:o.shop};
+  }
+  var lastPriceCheck=0;
+  function loadMarket(manual){
+    lastPriceCheck=Date.now();
+    (function tryN(i){
+      if(i>=PRICE_URLS.length){ if(manual) toast('Fiyatlar alınamadı. İnternet bağlantını kontrol et ya da kendi fiyatını gir.'); return; }
+      fetch(PRICE_URLS[i]+(PRICE_URLS[i].indexOf('?')<0?'?':'&')+'t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); })
+        .then(function(j){ if(!j||!j.items) throw 0; if(!S.market||S.market.updated!==j.updated) db.doc('settings/market').set(j); if(manual) toast('Fiyatlar güncel'); })
+        .catch(function(){ tryN(i+1); });
+    })(0);
+  }
+
   // ---------- Form şemaları (her liste için alanlar) ----------
   function evOptions(){ return events().map(function(e){ return [e.id, e.name]; }); }
   var SCHEMA = {
@@ -187,9 +217,10 @@ textarea{min-height:76px;resize:vertical}
     payments:[{k:'title',l:'Ödeme',t:'text',req:1,w:1,ph:'ör. düğün salonu'},{k:'vendor',l:'Firma',t:'text'},{k:'event',l:'Etkinlik',t:'sel',o:evOptions},{k:'category',l:'Kategori',t:'sel',o:function(){return L('cats');}},{k:'total',l:'Toplam tutar (₺)',t:'number',req:1},{k:'paid',l:'Şu ana kadar ödenen (₺)',t:'number'},{k:'due',l:'Sonraki ödeme tarihi',t:'date'},{k:'note',l:'Not',t:'text',w:1,ph:'kapora, taksit planı, sözleşme…'}],
     vendors:[{k:'name',l:'Firma / kişi',t:'text',req:1},{k:'type',l:'Tür',t:'sel',o:function(){return L('vtypes');}},{k:'phone',l:'Telefon',t:'tel'},{k:'price',l:'Verilen fiyat',t:'text'},{k:'note',l:'Not',t:'text',w:1,ph:'adres, ne dahil, kiminle konuşuldu…'}],
     guests:[{k:'name',l:'Ad / aile',t:'text',req:1,ph:'ör. Ahmet amca ve ailesi'},{k:'count',l:'Kaç kişi',t:'number',def:function(){return 1;}},{k:'side',l:'Taraf',t:'sel',o:function(){return L('sides');}},{k:'phone',l:'Telefon',t:'tel'},{k:'events',l:'Davetli olduğu etkinlikler',t:'multi',o:evOptions,w:1},{k:'invited',l:'Davetiye gitti',t:'check'},{k:'rsvp',l:'Katılım',t:'sel',o:function(){return RSVP;}},{k:'note',l:'Not',t:'text',w:1}],
-    gifts:[{k:'from',l:'Kimden',t:'text',req:1},{k:'event',l:'Etkinlik',t:'sel',o:evOptions},{k:'type',l:'Ne',t:'sel',o:function(){return L('giftTypes');}},{k:'qty',l:'Adet / gram',t:'number'},{k:'value',l:'Yaklaşık değer (₺)',t:'number'},{k:'detail',l:'Açıklama',t:'text',w:1,ph:'ör. 22 ayar bilezik, kırmızı kutuda'},{k:'returned',l:'Karşılığı verildi',t:'check'}],
+    gifts:[{k:'from',l:'Kimden',t:'text',req:1},{k:'event',l:'Etkinlik',t:'sel',o:evOptions},{k:'type',l:'Ne',t:'sel',o:function(){return L('giftTypes');}},{k:'qty',l:'Adet / gram',t:'number'},{k:'value',l:'Değer (₺) · altında boş bırakırsan güncel alış fiyatıyla hesaplanır',t:'number'},{k:'detail',l:'Açıklama',t:'text',w:1,ph:'ör. 22 ayar bilezik, kırmızı kutuda'},{k:'returned',l:'Karşılığı verildi',t:'check'}],
     ceyiz:[{k:'item',l:'Eşya',t:'text',req:1,ph:'ör. buzdolabı'},{k:'room',l:'Oda / grup',t:'sel',o:function(){return L('rooms');}},{k:'prio',l:'Öncelik',t:'sel',o:function(){return PRIO;}},{k:'price',l:'Fiyat (₺)',t:'number'},{k:'buyer',l:'Kim alıyor',t:'sel',o:function(){return L('payers');}},{k:'bought',l:'Alındı',t:'check'},{k:'note',l:'Not',t:'text',w:1,ph:'marka, model, mağaza…'}],
-    schedule:[{k:'time',l:'Saat',t:'time',req:1},{k:'title',l:'Ne olacak',t:'text',req:1,ph:'ör. gelin alma'},{k:'who',l:'Sorumlu',t:'sel',o:function(){return L('who');}},{k:'note',l:'Not',t:'text',w:1}]
+    schedule:[{k:'time',l:'Saat',t:'time',req:1},{k:'title',l:'Ne olacak',t:'text',req:1,ph:'ör. gelin alma'},{k:'who',l:'Sorumlu',t:'sel',o:function(){return L('who');}},{k:'note',l:'Not',t:'text',w:1}],
+    goldbuy:[{k:'goldType',l:'Ne aldın',t:'sel',o:function(){return Object.keys(GOLD);}},{k:'qty',l:'Adet (bilezik ve gram altında gram)',t:'number',req:1,def:function(){return 1;}},{k:'unitPrice',l:'Birim fiyat (₺) · kuyumcunun verdiği fiyat',t:'number',req:1,def:function(){ return price('ceyrek','sell')||''; }},{k:'amount',l:'Toplam ödenen (₺)',t:'number',req:1,def:function(){ return price('ceyrek','sell')||''; }},{k:'shop',l:'Kuyumcu',t:'text'},{k:'event',l:'Etkinlik',t:'sel',o:evOptions},{k:'paidBy',l:'Kim ödedi',t:'sel',o:function(){return L('payers');}},{k:'date',l:'Tarih',t:'date',def:today},{k:'note',l:'Not',t:'text',w:1,ph:'ör. Merve\'ye söz takısı'}]
   };
   function fieldHTML(c, f, val, pre){
     var id=pre+f.k, w=f.w?' wide':'';
@@ -285,7 +316,7 @@ textarea{min-height:76px;resize:vertical}
       return '<div class="sum" data-goto="ev:'+e.id+'" style="cursor:pointer"><span class="t">'+esc(e.name)+'</span><span class="v">'+d+'/'+ts.length+'</span><div class="bar"><i style="width:'+(ts.length?d/ts.length*100:0)+'%"></i></div></div>'; }).join('')+
       '<div class="sum"><span class="t">Harcanan</span><span class="v">'+tl(total)+'</span>'+(budget?'<div class="bar'+(total>budget?' over':'')+'"><i style="width:'+Math.min(100,total/budget*100)+'%"></i></div><span class="t num">Bütçe '+tl(budget)+'</span>':'<span class="t">Bütçe girilmedi</span>')+'</div>'+
       '<div class="sum"><span class="t">Davetliler</span><span class="v">'+gTotal+' kişi</span><span class="t">'+coming+' kişi geliyor</span></div>'+
-      '<div class="sum"><span class="t">Çeyiz</span><span class="v">'+czb+'/'+cz+'</span><span class="t">alındı</span></div></div>';
+      (function(){ var gv=sum(S.gifts,function(g){return GOLD[g.type]?giftValue(g).v:0;})+sum(S.expenses,function(x){return x.goldType?goldNow(x.goldType,x.qty):0;}); return gv?'<div class="sum" data-goto="altin:1" style="cursor:pointer"><span class="t">Altınlar bugün</span><span class="v">'+tl(gv)+'</span><span class="t">alış fiyatıyla</span></div>':''; })()+'<div class="sum"><span class="t">Çeyiz</span><span class="v">'+czb+'/'+cz+'</span><span class="t">alındı</span></div></div>';
     return h;
   }
 
@@ -359,8 +390,9 @@ textarea{min-height:76px;resize:vertical}
 
   // ---------- Para ----------
   function renderPara(){
-    var h='<div class="sub"><button data-paraview="odemeler" aria-selected="'+(V.paraView==='odemeler')+'">Ödemeler</button><button data-paraview="harcamalar" aria-selected="'+(V.paraView==='harcamalar')+'">Harcamalar</button><button data-paraview="butce" aria-selected="'+(V.paraView==='butce')+'">Bütçe</button></div>';
+    var h='<div class="sub"><button data-paraview="odemeler" aria-selected="'+(V.paraView==='odemeler')+'">Ödemeler</button><button data-paraview="harcamalar" aria-selected="'+(V.paraView==='harcamalar')+'">Harcamalar</button><button data-paraview="butce" aria-selected="'+(V.paraView==='butce')+'">Bütçe</button><button data-paraview="altin" aria-selected="'+(V.paraView==='altin')+'">Altın</button></div>';
     if(V.paraView==='harcamalar') return h+renderHarcamalar();
+    if(V.paraView==='altin') return h+renderAltin();
     if(V.paraView==='butce') return h+renderButce();
     return h+renderOdemeler();
   }
@@ -384,13 +416,13 @@ textarea{min-height:76px;resize:vertical}
   }
   function renderHarcamalar(){
     var evs=events(), rows=S.expenses.filter(function(x){return V.expF==='Hepsi'||x.event===V.expF;}).sort(function(a,b){return (b.date||'').localeCompare(a.date||'')||(b.createdAt||0)-(a.createdAt||0);});
-    var h=addBox('expenses','Harcama ekle');
+    var h='<div class="row">'+(adding==='goldbuy'?'':addBox('expenses','Harcama ekle'))+(adding==='expenses'?'':addBox('goldbuy','Altın alışı'))+'</div>';
     h+='<div class="chips">'+[['Hepsi','Hepsi']].concat(evs.map(function(e){return [e.id,e.name];})).map(function(e){return '<button class="chip" data-expf="'+esc(e[0])+'" aria-pressed="'+(e[0]===V.expF)+'">'+esc(e[1])+'</button>';}).join('')+'</div>';
     h+='<div class="shead"><h3>'+rows.length+' kayıt</h3><span class="amt">'+tl(sum(rows,function(x){return x.amount;}))+'</span></div>';
     if(!rows.length) return h+'<div class="empty">Henüz harcama yok.</div>';
     return h+'<ul>'+rows.map(function(x){
-      return '<li class="item" id="expenses-'+x.id+'"><div class="iline"><div class="ibody"><span class="ttl">'+esc(x.item)+'</span><span class="meta"><span>'+fd(x.date,true)+'</span><span>'+esc(evName(x.event))+'</span><span>'+esc(x.category||'')+'</span><b>'+esc(x.paidBy||'')+'</b>'+(x.note?'<span>'+esc(x.note)+'</span>':'')+'</span></div><span class="amt">'+tl(x.amount)+'</span><button class="more" data-edit="expenses:'+x.id+'">Düzenle</button></div>'+
-        (isEditing('expenses',x.id)?editBox('expenses',x):'')+'</li>'; }).join('')+'</ul>';
+      return '<li class="item" id="expenses-'+x.id+'"><div class="iline"><div class="ibody"><span class="ttl">'+esc(x.item)+'</span><span class="meta"><span>'+fd(x.date,true)+'</span><span>'+esc(evName(x.event))+'</span><span>'+esc(x.category||'')+'</span><b>'+esc(x.paidBy||'')+'</b>'+(x.goldType?'<span>birim '+tl(x.unitPrice)+'</span>':'')+(x.note?'<span>'+esc(x.note)+'</span>':'')+'</span></div><span class="amt">'+tl(x.amount)+'</span><button class="more" data-edit="expenses:'+x.id+'">Düzenle</button></div>'+
+        (isEditing('expenses',x.id)?editBox(x.goldType?'goldbuy':'expenses',x):'')+'</li>'; }).join('')+'</ul>';
   }
   function renderButce(){
     var evs=events(), h='<p class="tip">Etkinlik bütçelerini Plan\'da "Tarih ve dönemleri düzenle"den girin.</p>';
@@ -402,6 +434,37 @@ textarea{min-height:76px;resize:vertical}
     function table(title,o){ var ks=Object.keys(o).sort(function(a,b){return o[b]-o[a];}), mx=Math.max.apply(null,[1].concat(ks.map(function(k){return o[k];})));
       return '<section class="section"><div class="shead"><h3>'+title+'</h3></div>'+(ks.length?'<ul>'+ks.map(function(k){ return '<li class="item"><div class="iline"><div class="ibody"><span>'+esc(k)+'</span><div class="bar"><i style="width:'+(o[k]/mx*100)+'%"></i></div></div><span class="amt">'+tl(o[k])+'</span></div></li>'; }).join('')+'</ul>':'<p class="muted small">Harcama girildikçe dolar.</p>')+'</section>'; }
     return h+table('Kategorilere göre',byCat)+table('Kim ne kadar ödedi',byPay);
+  }
+
+  function renderAltin(){
+    var m=S.market, h='';
+    h+='<div class="box"><div class="row"><h3>Güncel fiyatlar</h3><span class="spacer"></span><button class="btn link small" data-refreshprices="1">Yenile</button></div>'+
+      (m&&m.items ? '<p class="small muted">'+esc(m.source||'Truncgil Finans')+' · '+esc(fdt(m.sourceDate)||fdt(m.updated))+' itibarıyla. Kuyumcunun fiyatı işçilik ve makas yüzünden farklı olabilir; farklıysa kendi fiyatını yaz.</p>'
+                  : '<p class="small muted">Fiyatlar henüz alınamadı. İnternet açıkken uygulamayı açınca gelir; bu arada kendi fiyatını yazabilirsin.</p>')+
+      '<ul>'+Object.keys(GOLDNAMES).map(function(k){
+        var it=m&&m.items&&m.items[k]||{}, man=(S.goldManual||{})[k]||{};
+        return '<li class="item"><div class="iline"><div class="ibody"><span class="ttl">'+esc(GOLDNAMES[k])+((isManual(k,'buy')||isManual(k,'sell'))?' <span class="pill wait">elle</span>':'')+'</span>'+
+          '<span class="meta num"><span>Piyasa alış <b>'+(it.buy?tl(it.buy):'—')+'</b></span><span>satış <b>'+(it.sell?tl(it.sell):'—')+'</b></span></span></div></div>'+
+          '<div class="fgrid"><label class="field">Kendi alış fiyatım<input type="number" inputmode="decimal" step="any" id="gm-'+k+'-buy" data-gm="'+k+':buy" value="'+(man.buy||'')+'" placeholder="Boş: piyasa fiyatı"></label>'+
+          '<label class="field">Kendi satış fiyatım<input type="number" inputmode="decimal" step="any" id="gm-'+k+'-sell" data-gm="'+k+':sell" value="'+(man.sell||'')+'" placeholder="Boş: piyasa fiyatı"></label></div></li>';
+      }).join('')+'</ul>'+
+      '<div class="row"><a class="btn link small" href="https://canlipiyasalar.haremaltin.com/" target="_blank" rel="noopener">Harem Altın\'da karşılaştır</a><span class="spacer"></span>'+
+      (Object.keys(S.goldManual||{}).length?'<button class="btn danger" data-gmclear="1">Kendi fiyatlarımı temizle</button>':'')+'</div>'+
+      '<p class="small muted">Kendi yazdığın fiyat boş bırakılana kadar uygulamanın her yerinde piyasa fiyatı yerine kullanılır. Alış: bozdurursan alacağın, satış: alırken ödeyeceğin fiyat.</p></div>';
+    var buys=S.expenses.filter(function(x){return x.goldType;}).sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
+    h+='<section class="section"><div class="shead"><h3>Aldığın altınlar</h3><span class="muted small num">'+buys.length+'</span></div>';
+    h+='<div>'+addBox('goldbuy','Altın alışı')+'</div>';
+    if(!buys.length) h+='<p class="muted small" style="padding:8px 0">Altın aldığında buraya yaz: adet, kuyumcunun verdiği birim fiyat. Harcamalara da otomatik işlenir.</p>';
+    else {
+      var cost=sum(buys,function(x){return x.amount;}), now=sum(buys,function(x){return goldNow(x.goldType,x.qty);}), allPriced=buys.every(function(x){return goldNow(x.goldType,x.qty)>0;});
+      h+='<div class="summary"><div class="sum"><span class="t">Ödediğin</span><span class="v">'+tl(cost)+'</span></div><div class="sum"><span class="t">Bugün bozdursan</span><span class="v">'+(now?tl(now):'—')+'</span><span class="t '+(now>=cost?'ok':'late')+'">'+(now&&allPriced?(now>=cost?'+':'−')+tl(Math.abs(now-cost)):'fiyat eksik')+'</span></div></div>';
+      h+='<ul>'+buys.map(function(x){ var n=goldNow(x.goldType,x.qty);
+        return '<li class="item"><div class="iline"><div class="ibody click" data-goto="expenses:'+x.id+'"><span class="ttl">'+esc(x.item)+'</span><span class="meta"><span>'+fd(x.date,true)+'</span><span>birim '+tl(x.unitPrice)+'</span>'+(n?'<span>bugün ≈ '+tl(n)+'</span>':'')+'</span></div><span class="amt">'+tl(x.amount)+'</span></div></li>'; }).join('')+'</ul>';
+    }
+    h+='</section>';
+    var gg=S.gifts.filter(function(g){return GOLD[g.type];});
+    if(gg.length) h+='<section class="section"><div class="shead"><h3>Takılan altınlar</h3></div><p class="small">'+gg.length+' kayıt · bugünkü değeri ≈ <b class="num">'+tl(sum(gg,function(g){return giftValue(g).v;}))+'</b></p></section>';
+    return h;
   }
 
   // ---------- Listeler ----------
@@ -432,11 +495,11 @@ textarea{min-height:76px;resize:vertical}
     var list=S.gifts.slice().sort(function(a,b){ return (b.createdAt||0)-(a.createdAt||0); });
     var h='<p class="tip">Söz, nişan, kına ve düğünde kim ne taktı, ne getirdi. İleride onların düğününde karşılık vermek için.</p>';
     var byType={}; list.forEach(function(g){ var k=g.type||'Diğer'; byType[k]=byType[k]||{n:0,q:0}; byType[k].n++; byType[k].q+=Number(g.qty)||0; });
-    h+='<div class="summary"><div class="sum"><span class="t">Toplam değer</span><span class="v">'+tl(sum(list,function(g){return g.value;}))+'</span><span class="t">'+list.length+' kayıt</span></div>'+Object.keys(byType).map(function(k){ return '<div class="sum"><span class="t">'+esc(k)+'</span><span class="v">'+(byType[k].q||byType[k].n)+'</span><span class="t">'+byType[k].n+' kişiden</span></div>'; }).join('')+'</div>';
+    h+='<div class="summary"><div class="sum"><span class="t">Toplam değer</span><span class="v">'+tl(sum(list,function(g){return giftValue(g).v;}))+'</span><span class="t">'+list.length+' kayıt</span></div>'+Object.keys(byType).map(function(k){ return '<div class="sum"><span class="t">'+esc(k)+'</span><span class="v">'+(byType[k].q||byType[k].n)+'</span><span class="t">'+byType[k].n+' kişiden</span></div>'; }).join('')+'</div>';
     h+=addBox('gifts','Takı / hediye ekle');
     if(!list.length) return h+'<div class="empty">Henüz kayıt yok. Takı töreninde biri yazarsa sonra uğraşmazsınız.</div>';
     return h+'<ul>'+list.map(function(g){
-      return '<li class="item'+(g.returned?' done':'')+'" id="gifts-'+g.id+'"><div class="iline"><div class="ibody"><span class="ttl">'+esc(g.from)+'</span><span class="meta"><b>'+esc(g.type||'')+(g.qty?' × '+g.qty:'')+'</b><span>'+esc(evName(g.event))+'</span>'+(g.detail?'<span>'+esc(g.detail)+'</span>':'')+(g.returned?'<span class="ok">karşılığı verildi</span>':'')+'</span></div>'+(g.value?'<span class="amt">'+tl(g.value)+'</span>':'')+'<button class="more" data-edit="gifts:'+g.id+'">Düzenle</button></div>'+(isEditing('gifts',g.id)?editBox('gifts',g):'')+'</li>'; }).join('')+'</ul>';
+      return '<li class="item'+(g.returned?' done':'')+'" id="gifts-'+g.id+'"><div class="iline"><div class="ibody"><span class="ttl">'+esc(g.from)+'</span><span class="meta"><b>'+esc(g.type||'')+(g.qty?' × '+g.qty:'')+'</b><span>'+esc(evName(g.event))+'</span>'+(g.detail?'<span>'+esc(g.detail)+'</span>':'')+(g.returned?'<span class="ok">karşılığı verildi</span>':'')+'</span></div>'+(function(){ var gv=giftValue(g); return gv.v?'<span class="amt">'+(gv.auto?'≈ ':'')+tl(gv.v)+'</span>':''; })()+'<button class="more" data-edit="gifts:'+g.id+'">Düzenle</button></div>'+(isEditing('gifts',g.id)?editBox('gifts',g):'')+'</li>'; }).join('')+'</ul>';
   }
   function renderCeyiz(){
     var rooms=L('rooms'), list=S.ceyiz.filter(function(c){ return V.roomF==='Hepsi'||c.room===V.roomF; });
@@ -508,6 +571,8 @@ textarea{min-height:76px;resize:vertical}
     m.innerHTML = V.sec==='plan'?renderPlan():V.sec==='para'?renderPara():V.sec==='liste'?renderListe():V.sec==='ayar'?renderAyar():renderBugun();
   }
   document.addEventListener('focusout', function(){ setTimeout(function(){ if(pendingRender) render(); }, 0); });
+  function goldCalc(pre){ var q=Number((document.getElementById(pre+'qty')||{}).value)||0, u=Number((document.getElementById(pre+'unitPrice')||{}).value)||0, a=document.getElementById(pre+'amount'); if(a && q && u) a.value=Math.round(q*u*100)/100; }
+  document.addEventListener('input', function(e){ var t=e.target; if(!t.closest || !t.closest('[data-addform="goldbuy"],[data-editform^="goldbuy:"]')) return; if(/-(qty|unitPrice)$/.test(t.id)) goldCalc(t.id.slice(0,2)); });
   function reset(){ editing=null; adding=null; payFor=null; calFor=null; confirmDel=null; }
   function go(sec){ V.sec=sec; reset(); keepView(); render(); window.scrollTo({top:0}); }
   function goto(target){
@@ -515,6 +580,7 @@ textarea{min-height:76px;resize:vertical}
     V.q=''; document.getElementById('q').value=''; document.getElementById('searchbox').hidden=true; reset();
     if(k==='task'){ var t=S.tasks.filter(function(x){return x.id===id;})[0]; if(!t) return; V.sec='plan'; V.ev=t.event; V.planView='isler'; V.whoF='Hepsi'; open[id]=true; anchor='task-'+id; }
     else if(k==='ev'){ V.sec='plan'; V.ev=id; V.planView='isler'; }
+    else if(k==='altin'){ V.sec='para'; V.paraView='altin'; }
     else if(k==='payment'||k==='payments'){ V.sec='para'; V.paraView='odemeler'; anchor='payment-'+id; }
     else if(k==='expenses'){ V.sec='para'; V.paraView='harcamalar'; V.expF='Hepsi'; editing={c:k,id:id}; anchor='expenses-'+id; }
     else if(k==='schedule'){ var s=S.schedule.filter(function(x){return x.id===id;})[0]; V.sec='plan'; V.ev=s&&s.event; V.planView='akis'; editing={c:k,id:id}; }
@@ -531,7 +597,7 @@ textarea{min-height:76px;resize:vertical}
     if(kind==='expenses'){ head=['Tarih','Kalem','Tutar','Etkinlik','Kategori','Ödeyen','Not']; rows=S.expenses.map(function(x){ return [x.date,x.item,x.amount,E(x.event),x.category,x.paidBy,x.note]; }); }
     if(kind==='payments'){ head=['Ödeme','Firma','Etkinlik','Toplam','Ödenen','Kalan','Sonraki tarih','Not']; rows=S.payments.map(function(x){ return [x.title,x.vendor,E(x.event),x.total,x.paid||0,(x.total||0)-(x.paid||0),x.due,x.note]; }); }
     if(kind==='guests'){ head=['Ad','Kişi','Taraf','Telefon','Etkinlikler','Davetiye','Katılım','Not']; rows=S.guests.map(function(x){ return [x.name,x.count||1,x.side,x.phone,(x.events||[]).map(E).join(', '),x.invited?'Gitti':'Gitmedi',x.rsvp,x.note]; }); }
-    if(kind==='gifts'){ head=['Kimden','Etkinlik','Ne','Adet/gram','Değer','Açıklama','Karşılığı verildi']; rows=S.gifts.map(function(x){ return [x.from,E(x.event),x.type,x.qty,x.value,x.detail,x.returned?'Evet':'Hayır']; }); }
+    if(kind==='gifts'){ head=['Kimden','Etkinlik','Ne','Adet/gram','Değer','Açıklama','Karşılığı verildi']; rows=S.gifts.map(function(x){ return [x.from,E(x.event),x.type,x.qty,giftValue(x).v,x.detail,x.returned?'Evet':'Hayır']; }); }
     if(kind==='ceyiz'){ head=['Eşya','Oda','Öncelik','Fiyat','Kim alıyor','Alındı','Not']; rows=S.ceyiz.map(function(x){ return [x.item,x.room,x.prio,x.price,x.buyer,x.bought?'Evet':'Hayır',x.note]; }); }
     if(kind==='vendors'){ head=['Ad','Tür','Telefon','Fiyat','Not']; rows=S.vendors.map(function(x){ return [x.name,x.type,x.phone,x.price,x.note]; }); }
     var cell=function(v){ v=v==null?'':String(v); if(typeof v==='string' && /^[0-9.]+$/.test(v)) v=v.replace('.',','); return /[";\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
@@ -544,6 +610,7 @@ textarea{min-height:76px;resize:vertical}
   // ---------- Olaylar ----------
   function delDoc(key){
     var p=key.split(':'), c=p[0], id=p[1];
+    if(c==='goldbuy') c='expenses';
     if(c==='phases'){ if(S.tasks.some(function(t){return phaseOfTask(t)===id;})){ toast('Önce bu dönemdeki işleri başka döneme taşıyın ya da silin.'); return; } return col('phases').doc(id).delete().then(function(){toast('Dönem silindi');}); }
     if(c==='events'){
       S.tasks.filter(function(t){return t.event===id;}).forEach(function(t){ col('tasks').doc(t.id).delete(); });
@@ -582,6 +649,8 @@ textarea{min-height:76px;resize:vertical}
     if(has('data-cal')){ calFor=g('data-cal'); render(); return; }
     if(has('data-ics')){ var c=g('data-ics').split(':'), it=calItem(c[0],c[1]); if(it){ download('takvim.ics', icsFor(it), 'text/calendar'); toast('Açılan ekranda "Takvime Ekle"ye dokunun'); } calFor=null; render(); return; }
     if(has('data-backup')){ backup(); return; }
+    if(has('data-refreshprices')){ loadMarket(true); return; }
+    if(has('data-gmclear')){ db.doc('settings/goldmanual').set({}).then(function(){ toast('Piyasa fiyatlarına dönüldü'); }); return; }
     if(has('data-csv')){ csv(g('data-csv')); return; }
     if(has('data-rsvp')){ var gid=g('data-rsvp'), gu=S.guests.filter(function(x){return x.id===gid;})[0], nx=RSVP[(RSVP.indexOf(gu.rsvp||'Bekliyor')+1)%3]; upd('guests',gid,{rsvp:nx}); return; }
     if(has('data-ceyizexp')){ var cid=g('data-ceyizexp'), cz=S.ceyiz.filter(function(x){return x.id===cid;})[0];
@@ -597,6 +666,10 @@ textarea{min-height:76px;resize:vertical}
   document.addEventListener('change', function(e){
     var el=e.target, g=function(n){return el.getAttribute(n);};
     if(el.id==='restore' && el.files && el.files[0]){ var fr=new FileReader(); fr.onload=function(){ try{ db.importJSON(fr.result); toast('Yedek yüklendi'); }catch(x){ toast(x.message||'Dosya okunamadı'); } el.value=''; }; fr.readAsText(el.files[0]); return; }
+    if(el.hasAttribute('data-gm')){ var gp=g('data-gm').split(':'), gm=JSON.parse(JSON.stringify(S.goldManual||{})), gvv=Number(el.value)||0;
+      gm[gp[0]]=gm[gp[0]]||{}; if(gvv>0) gm[gp[0]][gp[1]]=gvv; else delete gm[gp[0]][gp[1]]; if(!Object.keys(gm[gp[0]]).length) delete gm[gp[0]];
+      db.doc('settings/goldmanual').set(gm).then(function(){ toast(gvv>0?'Kendi fiyatın kaydedildi':'Piyasa fiyatı kullanılacak'); }); return; }
+    if(/^[ae]-goldType$/.test(el.id)){ var pre=el.id.slice(0,2), gd=GOLD[el.value], sp=gd&&price(gd.k,'sell'); if(sp){ document.getElementById(pre+'unitPrice').value=sp; } goldCalc(pre); return; }
     if(el.hasAttribute('data-done')){ upd('tasks',g('data-done'),{done:el.checked}); return; }
     if(el.hasAttribute('data-invited')){ upd('guests',g('data-invited'),{invited:el.checked}); return; }
     if(el.hasAttribute('data-bought')){ upd('ceyiz',g('data-bought'),{bought:el.checked}); return; }
@@ -613,8 +686,10 @@ textarea{min-height:76px;resize:vertical}
     e.preventDefault(); var f=e.target, g=function(n){return f.getAttribute(n);};
     if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
     if(f.hasAttribute('data-addform')){ var c=g('data-addform'), fixed=f.hasAttribute('data-fixed')?JSON.parse(g('data-fixed')):null, o=readForm(c,'a-',fixed); if(!o){ toast('Zorunlu alanları doldurun'); return; }
+      if(c==='goldbuy'){ o=goldToExpense(o); c='expenses'; }
       o.createdAt=Date.now(); adding=null; col(c).add(o).then(function(){ toast('Eklendi'); }); return; }
     if(f.hasAttribute('data-editform')){ var p=g('data-editform').split(':'), o2=readForm(p[0],'e-'); if(!o2){ toast('Zorunlu alanları doldurun'); return; }
+      if(p[0]==='goldbuy'){ o2=goldToExpense(o2); p[0]='expenses'; }
       if(p[0]==='schedule'){ var old=S.schedule.filter(function(x){return x.id===p[1];})[0]; if(old) o2.event=old.event; }
       editing=null; upd(p[0],p[1],o2,'Kaydedildi'); return; }
     if(f.hasAttribute('data-payform')){ var pid=g('data-payform'), pay=S.payments.filter(function(x){return x.id===pid;})[0], amt=Number(document.getElementById('pf-amt').value)||0; if(!amt) return;
@@ -639,6 +714,10 @@ textarea{min-height:76px;resize:vertical}
   });
   db.doc('settings/people').onSnapshot(function(s){ S.people=s.exists?s.data():null; render(); });
   db.doc('settings/meta').onSnapshot(function(s){ S.meta=s.exists?s.data():{}; render(); });
+  db.doc('settings/market').onSnapshot(function(s){ S.market=s.exists?s.data():null; render(); });
+  db.doc('settings/goldmanual').onSnapshot(function(s){ S.goldManual=s.exists?s.data():{}; render(); });
+  loadMarket(false);
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible' && Date.now()-lastPriceCheck>30*60000) loadMarket(false); });
   setTimeout(function(){ S.ready=true; render(); }, 0);
 })();
 </script>
