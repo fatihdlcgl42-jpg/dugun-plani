@@ -1,8 +1,8 @@
 {
   "source": "Truncgil Finans",
-  "sourceUrl": "https://finance.truncgil.com/api/today.json",
-  "sourceDate": "2026-11-03T19:03:02+03:00",
-  "updated": "2026-11-03T16:03:16+00:00",
+  "sourceUrl": "https://finans.truncgil.com/v4/today.json",
+  "sourceDate": "2026-11-03T22:07:01+03:00",
+  "updated": "2026-11-03T19:07:48+00:00",
   "items": {
     "ceyrek": {
       "buy": 10233.52,
@@ -17,8 +17,8 @@
       "sell": 41751.09
     },
     "gram": {
-      "buy": 6324.6,
-      "sell": 6325.54
+      "buy": 6312.56,
+      "sell": 6313.47
     },
     "bilezik22": {
       "buy": 5833.11,
