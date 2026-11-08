@@ -1,8 +1,8 @@
 {
   "source": "Truncgil Finans",
   "sourceUrl": "https://finans.truncgil.com/v4/today.json",
-  "sourceDate": "2026-11-08T00:48:01+03:00",
-  "updated": "2026-11-07T21:48:05+00:00",
+  "sourceDate": "2026-11-08T04:21:01+03:00",
+  "updated": "2026-11-08T01:21:44+00:00",
   "items": {
     "ceyrek": {
       "buy": 10455.25,
