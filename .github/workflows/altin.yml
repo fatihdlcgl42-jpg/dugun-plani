@@ -2,7 +2,7 @@ name: Altın fiyatları
 
 on:
   schedule:
-    - cron: '17 */3 * * *'   # 3 saatte bir (UTC)
+    - cron: '17 * * * *'   # saatte bir (UTC)
   workflow_dispatch:
   push:
     branches: [main]

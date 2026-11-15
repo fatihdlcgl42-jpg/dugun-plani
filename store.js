@@ -1,13 +1,26 @@
 // Telefonda kalan veri deposu. Sayfa kodunun beklediği küçük veritabanı arayüzünü
 // (collection/doc, add, update, set, delete, onSnapshot) tarayıcı hafızası üzerinde sağlar.
 // Veri yapısı ileride Firebase'e taşınmaya hazır: koleksiyon -> { belgeKimliği: veri }.
+// Fotoğraflar burada değil, ayrı bir depoda (IndexedDB) durur; bkz. index.html "Fotoğraflar".
 (function(){
   var KEY = 'dugun-plani-v1';
   var data = null, listeners = [];
 
+  function migrate(d, beforeKey){
+    if(!window.MIGRATE) return d;
+    var before = JSON.stringify(d);
+    d = window.MIGRATE(d);
+    if(JSON.stringify(d) !== before && beforeKey){
+      // Geçişten önceki hali bir kez saklanır; bir sorun olursa geri dönülebilir.
+      try { if(!localStorage.getItem(beforeKey)) localStorage.setItem(beforeKey, before); } catch(e){}
+    }
+    return d;
+  }
   function load(){
     try { data = JSON.parse(localStorage.getItem(KEY)); } catch(e){ data = null; }
-    if(!data || typeof data !== 'object'){ data = JSON.parse(JSON.stringify(window.SEED)); save(); }
+    if(!data || typeof data !== 'object') data = JSON.parse(JSON.stringify(window.SEED));
+    data = migrate(data, KEY + '-surum1-yedek');
+    save();
   }
   function save(){
     try { localStorage.setItem(KEY, JSON.stringify(data)); }
@@ -48,11 +61,14 @@
       };
     },
     doc: function(path){ var p = path.split('/'); return docRef(p[0], p[1]); },
-    exportJSON: function(){ return JSON.stringify({app:'dugun-plani', version:1, exportedAt:new Date().toISOString(), data:data}, null, 2); },
+    exportJSON: function(){ return JSON.stringify({app:'dugun-plani', version:2, exportedAt:new Date().toISOString(), data:data}); },
     importJSON: function(text){
       var o = JSON.parse(text); var d = o && o.data;
       if(!d || typeof d !== 'object' || !d.events) throw new Error('Bu dosya bir plan yedeği değil.');
-      data = d; save(); Object.keys(data).forEach(notify);
+      try { localStorage.setItem(KEY + '-yukleme-oncesi', JSON.stringify(data)); } catch(e){}
+      data = migrate(d, null); save();
+      var names = {}; listeners.forEach(function(l){ names[l.name] = 1; }); Object.keys(data).forEach(function(n){ names[n] = 1; });
+      Object.keys(names).forEach(notify);
     }
   };
 })();
