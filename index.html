@@ -253,6 +253,8 @@ details.morefields>.fgrid{margin-top:10px}
   function fail(e){ toast((e&&e.message)||'Kaydedilemedi.'); }
   function L(k){ var p=S.people||{}; return p[k] || DEF[k]; }
   function opts(list, sel){ return list.map(function(w){ return '<option'+(w===sel?' selected':'')+'>'+esc(w)+'</option>'; }).join('') + (sel && list.indexOf(sel)<0 ? '<option selected>'+esc(sel)+'</option>' : ''); }
+  function whoOpts(sel){ return '<option value="">— kişi seçilmedi</option>'+opts(L('who'),sel||''); }
+  function whoTag(w){ return w?'<b>'+esc(w)+'</b>':''; }
   function sum(a,f){ return a.reduce(function(t,x){ return t+(Number(f?f(x):x)||0); },0); }
   function byId(arr,id){ for(var i=0;i<arr.length;i++) if(arr[i].id===id) return arr[i]; return null; }
   function upd(c,id,data,msg){ return col(c).doc(id).update(data).then(function(){ if(msg) toast(msg); }, fail); }
@@ -413,7 +415,7 @@ details.morefields>.fgrid{margin-top:10px}
       {k:'value',l:'Değer (₺) · altında boş bırakırsan güncel fiyatla hesaplanır',t:'number',opt:1},{k:'detail',l:'Açıklama',t:'text',w:1,opt:1,ph:'ör. 22 ayar bilezik, kırmızı kutuda'},{k:'returned',l:'Karşılığı verildi',t:'check',opt:1}],
     ceyiz:[{k:'item',l:'Eşya',t:'text',req:1,ph:'ör. buzdolabı'},{k:'room',l:'Oda / grup',t:'sel',o:function(){return L('rooms');}},{k:'price',l:'Fiyat (₺)',t:'number'},{k:'bought',l:'Alındı (fiyatı harcamalara işlenir)',t:'check'},
       {k:'prio',l:'Öncelik',t:'sel',o:function(){return PRIO;},opt:1},{k:'buyer',l:'Kim alıyor',t:'sel',o:function(){return L('payers');},opt:1,def:function(){ var p=L('payers'); return p.indexOf('Ortak')>-1?'Ortak':p[0]; }},{k:'note',l:'Not',t:'text',w:1,opt:1,ph:'marka, model, mağaza…'},{k:'photos',l:'Fotoğraf',t:'photos',opt:1}],
-    schedule:[{k:'time',l:'Saat',t:'time',req:1},{k:'title',l:'Ne olacak',t:'text',req:1,ph:'ör. gelin alma'},{k:'who',l:'Sorumlu',t:'sel',o:function(){return L('who');}},{k:'note',l:'Not',t:'text',w:1,opt:1}],
+    schedule:[{k:'time',l:'Saat',t:'time',req:1},{k:'title',l:'Ne olacak',t:'text',req:1,ph:'ör. gelin alma'},{k:'who',l:'Sorumlu (isteğe bağlı)',t:'sel',o:function(){ return [['','— kişi seçilmedi']].concat(L('who').map(function(w){return [w,w];})); },def:function(){return '';}},{k:'note',l:'Not',t:'text',w:1,opt:1}],
     goldbuy:[{k:'goldType',l:'Ne aldın',t:'sel',o:function(){return Object.keys(GOLD);}},{k:'qty',l:'Adet (bilezik ve gram altında gram)',t:'number',req:1,def:function(){return 1;}},{k:'unitPrice',l:'Birim fiyat (₺) · kuyumcunun verdiği',t:'number',req:1,def:function(){ return price('ceyrek','sell')||''; }},{k:'amount',l:'Toplam ödenen (₺)',t:'number',req:1,def:function(){ return price('ceyrek','sell')||''; }},{k:'event',l:'Etkinlik',t:'sel',o:function(){return evOpts('all');}},{k:'paidBy',l:'Kim ödedi',t:'sel',o:function(){return L('payers');}},
       {k:'shop',l:'Kuyumcu',t:'text',opt:1},{k:'date',l:'Tarih',t:'date',opt:1},{k:'note',l:'Not',t:'text',w:1,opt:1,ph:'ör. Merve\'ye söz takısı'}],
     notes:[{k:'title',l:'Başlık',t:'text',req:1,w:1,ph:'ör. Salon teklifleri, annemin listesi'},{k:'photos',l:'Fotoğraflar (kâğıttaki notu çek)',t:'photos',w:1},{k:'text',l:'Not',t:'textarea',w:1},{k:'event',l:'Hangi etkinlik',t:'sel',o:function(){ return [['','— genel']].concat(evOpts('all')); },opt:1}]
@@ -520,7 +522,7 @@ details.morefields>.fgrid{margin-top:10px}
   }
   function miniTask(x){
     var late=x.due&&x.due<today();
-    return '<li class="item"><div class="iline"><input type="checkbox" data-done="'+x.id+'" aria-label="Tamamlandı"><div class="ibody click" data-goto="task:'+x.id+'"><span class="ttl">'+(x.important?'<span style="color:var(--gold)">★</span> ':'')+esc(x.title)+'</span><span class="meta"><b>'+esc(x.who)+'</b><span>'+esc(evName(x.event))+'</span>'+(x.due?'<span class="'+(late?'late':'')+'">'+fd(x.due)+' · '+inDays(x.due)+'</span>':'')+'</span></div></div></li>';
+    return '<li class="item"><div class="iline"><input type="checkbox" data-done="'+x.id+'" aria-label="Tamamlandı"><div class="ibody click" data-goto="task:'+x.id+'"><span class="ttl">'+(x.important?'<span style="color:var(--gold)">★</span> ':'')+esc(x.title)+'</span><span class="meta">'+whoTag(x.who)+'<span>'+esc(evName(x.event))+'</span>'+(x.due?'<span class="'+(late?'late':'')+'">'+fd(x.due)+' · '+inDays(x.due)+'</span>':'')+'</span></div></div></li>';
   }
   function renderBugun(){
     var t=today(), h='';
@@ -572,12 +574,12 @@ details.morefields>.fgrid{margin-top:10px}
   function taskItem(t){
     var late=!t.done&&t.due&&t.due<today(), o=!!open[t.id];
     var h='<li class="item'+(t.done?' done':'')+'" id="task-'+t.id+'"><div class="iline"><input type="checkbox" data-done="'+t.id+'"'+(t.done?' checked':'')+' aria-label="Tamamlandı">'+
-      '<div class="ibody click" data-open="'+t.id+'"><span class="ttl">'+esc(t.title)+'</span><span class="meta"><b>'+esc(t.who)+'</b>'+
+      '<div class="ibody click" data-open="'+t.id+'"><span class="ttl">'+esc(t.title)+'</span><span class="meta">'+whoTag(t.who)+
       (t.due?'<span class="'+(late?'late':'')+'">'+fd(t.due)+(late?' · gecikti':'')+'</span>':'')+
       (t.note?'<span>✎ '+esc(t.note.length>60?t.note.slice(0,60)+'…':t.note)+'</span>':'')+photoCount(t)+'</span></div>'+
       '<button class="star" data-star="'+t.id+'" aria-pressed="'+!!t.important+'" aria-label="Önemli">'+(t.important?'★':'☆')+'</button></div>';
     if(o) h+='<div class="detail"><label class="field wide">İş<input id="tt-'+t.id+'" data-tf="title" data-t="'+t.id+'" value="'+esc(t.title)+'"></label>'+
-      '<div class="fgrid"><label class="field">Kim yapacak<select id="tw-'+t.id+'" data-tf="who" data-t="'+t.id+'">'+opts(L('who'),t.who)+'</select></label>'+
+      '<div class="fgrid"><label class="field">Kim yapacak (isteğe bağlı)<select id="tw-'+t.id+'" data-tf="who" data-t="'+t.id+'">'+whoOpts(t.who)+'</select></label>'+
       '<label class="field">Etkinlik<select id="te-'+t.id+'" data-tf="event" data-t="'+t.id+'">'+planEvents().map(function(e){ return '<option value="'+e.id+'"'+(e.id===t.event?' selected':'')+'>'+esc(e.name)+'</option>'; }).join('')+'</select></label>'+
       '<label class="field">Tarih (isteğe bağlı)<input type="date" id="td-'+t.id+'" data-tf="due" data-t="'+t.id+'" value="'+esc(t.due||'')+'"></label>'+
       '<label class="field check"><input type="checkbox" id="ti-'+t.id+'" data-tf="important" data-t="'+t.id+'"'+(t.important?' checked':'')+'>Önemli (Bugün\'de görünür)</label></div>'+
@@ -603,7 +605,7 @@ details.morefields>.fgrid{margin-top:10px}
     if(V.planView==='akis') return h+renderAkis(ev);
     var who=L('who');
     h+='<form class="box addbar" data-addtask="'+ev.id+'"><input class="inp" id="nt" placeholder="Yeni iş yazın…" aria-label="Yeni iş" autocomplete="off">'+
-      '<div class="row"><select class="inp" id="nw" aria-label="Kim yapacak" style="flex:1">'+opts(who,'İkimiz')+'</select><button class="btn">Ekle</button></div>'+
+      '<div class="row"><select class="inp" id="nw" aria-label="Kim yapacak (isteğe bağlı)" style="flex:1">'+whoOpts('')+'</select><button class="btn">Ekle</button></div>'+
       '<details class="morefields"><summary>Tarih ya da önem ekle <span class="muted">(isteğe bağlı)</span></summary><div class="fgrid"><label class="field">Tarih<input type="date" id="nd"></label><label class="field check"><input type="checkbox" id="ni">Önemli ★</label></div></details></form>';
     var whos=who.filter(function(w){ return st.some(function(t){ return t.who===w; }); });
     if(V.whoF!=='Hepsi' && whos.indexOf(V.whoF)<0) V.whoF='Hepsi';
@@ -627,7 +629,7 @@ details.morefields>.fgrid{margin-top:10px}
     if(!items.length) return h+'<div class="empty">Henüz program yok. İlk adımı ekleyin (ör. 17:00 misafirlerin gelişi).</div>';
     return h+'<ul>'+items.map(function(s){
       if(isEditing('schedule',s.id)) return '<li class="item">'+editBox('schedule',s,'<div>'+calBtn('sched',s.id)+'</div>')+'</li>';
-      return '<li class="item"><div class="iline"><span class="time">'+esc(s.time)+'</span><div class="ibody"><span class="ttl">'+esc(s.title)+'</span><span class="meta"><b>'+esc(s.who||'')+'</b>'+(s.note?'<span>'+esc(s.note)+'</span>':'')+'</span></div><button class="more" data-edit="schedule:'+s.id+'">Düzenle</button></div></li>'; }).join('')+'</ul>';
+      return '<li class="item"><div class="iline"><span class="time">'+esc(s.time)+'</span><div class="ibody"><span class="ttl">'+esc(s.title)+'</span><span class="meta">'+whoTag(s.who)+(s.note?'<span>'+esc(s.note)+'</span>':'')+'</span></div><button class="more" data-edit="schedule:'+s.id+'">Düzenle</button></div></li>'; }).join('')+'</ul>';
   }
 
   // ---------- Para ----------

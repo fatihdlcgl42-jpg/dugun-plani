@@ -4,7 +4,18 @@ window.MIGRATE = function(d){
   if(!d || typeof d !== 'object') return d;
   d.settings = d.settings || {};
   var meta = d.settings.meta || {};
-  if((meta.schema || 1) >= 2) return d;
+  if((meta.schema || 1) < 2) v2(d);
+  if((d.settings.meta.schema || 1) < 3){
+    // Sürüm 3: "kim yapacak" isteğe bağlı. Hazır gelen işlerdeki kişi atamaları kaldırılır;
+    // kullanıcının kendi eklediği işlerdeki seçim korunur.
+    var tt = d.tasks || {};
+    Object.keys(tt).forEach(function(id){ if(!tt[id].createdAt) tt[id].who = ''; });
+    d.settings.meta.schema = 3;
+  }
+  return d;
+};
+function v2(d){
+  var meta = d.settings.meta || {};
 
   var ev = d.events = d.events || {};
   var t = d.tasks = d.tasks || {};
@@ -59,5 +70,4 @@ window.MIGRATE = function(d){
 
   meta.schema = 2;
   d.settings.meta = meta;
-  return d;
-};
+}
