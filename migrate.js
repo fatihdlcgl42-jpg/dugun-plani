@@ -30,6 +30,16 @@ window.MIGRATE = function(d){
     Object.keys(tk).forEach(function(id){ if(tk[id].createdAt) return; T.forEach(function(r){ if(tk[id].title) tk[id].title = tk[id].title.split(r[0]).join(r[1]); }); });
     d.settings.meta.schema = 4;
   }
+  if(d.settings.meta.schema < 5){
+    // Sürüm 5: davetli taraflarına arkadaşlar eklendi (liste daha önce değiştirildiyse).
+    var ps = d.settings.people;
+    if(ps && Array.isArray(ps.sides)){
+      ["Fatih'in arkadaşı","Merve'nin arkadaşı"].forEach(function(v){
+        if(ps.sides.indexOf(v) < 0){ var i = ps.sides.indexOf('Ortak arkadaş'); if(i < 0) ps.sides.push(v); else ps.sides.splice(i, 0, v); }
+      });
+    }
+    d.settings.meta.schema = 5;
+  }
   return d;
 };
 function v2(d){
