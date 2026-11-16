@@ -34,11 +34,23 @@ window.MIGRATE = function(d){
     // Sürüm 5: davetli taraflarına arkadaşlar eklendi (liste daha önce değiştirildiyse).
     var ps = d.settings.people;
     if(ps && Array.isArray(ps.sides)){
-      ["Fatih'in arkadaşı","Merve'nin arkadaşı"].forEach(function(v){
+      ["Fatih'in arkadaşları","Merve'nin arkadaşları"].forEach(function(v){
         if(ps.sides.indexOf(v) < 0){ var i = ps.sides.indexOf('Ortak arkadaş'); if(i < 0) ps.sides.push(v); else ps.sides.splice(i, 0, v); }
       });
     }
     d.settings.meta.schema = 5;
+  }
+  if(d.settings.meta.schema < 6){
+    // Sürüm 6: "damat / gelin / kız" ifadeleri isimlerle değişti; "arkadaşı" -> "arkadaşları".
+    var TT = {"Gelinliği seç (dikim ya da kiralık)": "Merve'nin düğün elbisesini seç (dikim ya da kiralık)", "Damatlığı seç": "Fatih'in düğün takımını seç", "Gelin buketi ve yaka çiçeği": "Merve'nin buketi ve Fatih'in yaka çiçeği", "Gelin arabası ve süslemesi": "Düğün arabası ve süslemesi", "Günün akışını yaz: gelin alma, nikâh, ilk dans, takı": "Günün akışını yaz: Merve'yi evden alma, ilk dans, takı", "Gelinlik ve damatlığı teslim al": "Merve'nin elbisesini ve Fatih'in takımını teslim al", "Damat bohçasını hazırla": "Fatih'in bohçasını hazırla", "Kız bohçasını hazırla": "Merve'nin bohçasını hazırla", "Yeri belirle: kız evi, salon ya da restoran; hangi şehirde": "Yeri belirle: Merve'nin ailesinin evi, salon ya da restoran; hangi şehirde", "Damat tarafının getireceklerini konuş (kına, tepsi, hediyeler)": "Fatih'in ailesinin getireceklerini konuş (kına, tepsi, hediyeler)", "Damat tarafının kına ve hediyeleri getirmesi": "Fatih'in ailesinin kına ve hediyeleri getirmesi"};
+    var tk6 = d.tasks || {};
+    Object.keys(tk6).forEach(function(id){ if(tk6[id].title && TT[tk6[id].title]) tk6[id].title = TT[tk6[id].title]; });
+    var A = {"Fatih'in arkadaşı":"Fatih'in arkadaşları","Merve'nin arkadaşı":"Merve'nin arkadaşları"};
+    var p6 = d.settings.people;
+    if(p6 && Array.isArray(p6.sides)){ var o6=[]; p6.sides.forEach(function(v){ v = A[v] || v; if(o6.indexOf(v) < 0) o6.push(v); }); p6.sides = o6; }
+    var g6 = d.guests || {};
+    Object.keys(g6).forEach(function(id){ if(A[g6[id].side]) g6[id].side = A[g6[id].side]; });
+    d.settings.meta.schema = 6;
   }
   return d;
 };
