@@ -12,6 +12,24 @@ window.MIGRATE = function(d){
     Object.keys(tt).forEach(function(id){ if(!tt[id].createdAt) tt[id].who = ''; });
     d.settings.meta.schema = 3;
   }
+  if(d.settings.meta.schema < 4){
+    // Sürüm 4: "Damat / Kız tarafı" yerine isimler.
+    var M = {'Damat':'Fatih','Gelin':'Merve','Damat tarafı':"Fatih'in ailesi",'Kız tarafı':"Merve'nin ailesi",'Gelin tarafı':"Merve'nin ailesi"};
+    var fix = function(v){ return (typeof v === 'string' && M[v]) ? M[v] : v; };
+    var pp = d.settings.people;
+    if(pp) Object.keys(pp).forEach(function(k){
+      if(Array.isArray(pp[k])){ var out = []; pp[k].forEach(function(v){ v = fix(v); if(out.indexOf(v) < 0) out.push(v); }); pp[k] = out; }
+    });
+    var fields = {tasks:['who'], schedule:['who'], expenses:['paidBy'], payments:['paidBy'], ceyiz:['buyer'], guests:['side']};
+    Object.keys(fields).forEach(function(c){
+      var coll = d[c] || {};
+      Object.keys(coll).forEach(function(id){ fields[c].forEach(function(f){ coll[id][f] = fix(coll[id][f]); }); });
+    });
+    var T = [['Damadın işyerinden',"Fatih'in işyerinden"],['Damat tarafının',"Fatih'in ailesinin"],['Kız tarafının',"Merve'nin ailesinin"]];
+    var tk = d.tasks || {};
+    Object.keys(tk).forEach(function(id){ if(tk[id].createdAt) return; T.forEach(function(r){ if(tk[id].title) tk[id].title = tk[id].title.split(r[0]).join(r[1]); }); });
+    d.settings.meta.schema = 4;
+  }
   return d;
 };
 function v2(d){
@@ -45,7 +63,7 @@ function v2(d){
     ['nikah-1','Nikâh tarihini belirle (18 Ocak 2027\'den önce)','İkimiz',true,'Eş durumu başvurusu yarıyıl tatilinden önceki hafta açılabilir. 2026\'da başvuru 14 Ocak\'ta açılmıştı.'],
     ['nikah-2','Evlilik için sağlık raporu al (ikimiz de)','İkimiz',true,'Aile hekiminden alınır; belediyeye başvuruda istenir.'],
     ['nikah-3','Vesikalık fotoğrafları hazırla','İkimiz',false,'Kaç adet istendiğini belediyeye sor.'],
-    ['nikah-4','Damadın işyerinden görev yeri belgesi al (eş durumu için)','Damat',true,''],
+    ['nikah-4',"Fatih'in işyerinden görev yeri belgesi al (eş durumu için)",'Fatih',true,''],
     ['nikah-5','MEB yarıyıl mazeret yer değiştirme takvimini takip et','Merve',true,'2026\'da başvuru 14–19 Ocak, atama 30 Ocak\'tı. 2027 takvimi yayımlanınca tarihleri buraya yaz.'],
     ['nikah-6','Nikâhtan sonra evliliğin e-Devlet\'te göründüğünü kontrol et','İkimiz',true,'Başvurudan önce nüfus kaydına işlenmiş olmalı.'],
     ['nikah-7','Eş durumu başvurusunu MEBBİS\'ten yap','Merve',true,'']
