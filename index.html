@@ -153,11 +153,19 @@ details.morefields>.fgrid{margin-top:10px}
 .th.missing::after{content:"?";color:var(--muted)}
 .phadd{width:68px;height:68px;border-radius:10px;border:1.5px dashed var(--accent);color:var(--accent);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.72rem;cursor:pointer;gap:2px;position:relative;flex:none;background:var(--surface)}
 .phadd svg{width:22px;height:22px}
-#viewer{position:fixed;inset:0;z-index:50;background:rgba(20,14,10,.94);display:flex;flex-direction:column;padding:calc(12px + env(safe-area-inset-top,0px)) 12px calc(14px + env(safe-area-inset-bottom,0px))}
+#viewer{position:fixed;inset:0;z-index:50;background:rgba(20,14,10,.97);display:flex;flex-direction:column;padding:calc(12px + env(safe-area-inset-top,0px)) 12px calc(14px + env(safe-area-inset-bottom,0px))}
 #viewer .vimg{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:auto}
 #viewer img{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px;touch-action:pinch-zoom}
 #viewer .vbar{display:flex;gap:10px;justify-content:space-between;padding-top:12px}
 #viewer .btn.danger{color:#f0a481}
+#viewer .vbar{align-items:center;flex-wrap:wrap}
+.vnav{display:flex;align-items:center;justify-content:center;gap:18px;color:#f1e8dc;order:-1;width:100%;padding-bottom:4px}
+#vcount{white-space:nowrap;min-width:48px;text-align:center}
+.vnav .btn{min-width:46px;font-size:1.4rem;line-height:1;background:rgba(255,255,255,.12);color:#f1e8dc}
+.camb{flex:none;color:var(--muted);cursor:pointer;padding:2px 4px;position:relative;display:flex}
+.camb svg{width:22px;height:22px}
+.tphotos{padding-left:36px}
+.tphotos .th{width:76px;height:76px}
 /* Hızlı takı girişi */
 .rchips{display:flex;flex-wrap:wrap;gap:6px}
 .rchips label{position:relative}
@@ -192,7 +200,7 @@ details.morefields>.fgrid{margin-top:10px}
   <button data-sec="liste"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg>Listeler</button>
   <button data-sec="ayar"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Ayarlar</button>
 </div></nav>
-<div id="viewer" hidden role="dialog" aria-label="Fotoğraf"><div class="vimg"><img id="vimg" alt="Fotoğraf"></div><div class="vbar"><button class="btn danger" id="vdel">Fotoğrafı kaldır</button><button class="btn" id="vclose">Kapat</button></div></div>
+<div id="viewer" hidden role="dialog" aria-label="Fotoğraf"><div class="vimg"><img id="vimg" alt="Fotoğraf"></div><div class="vbar"><button class="btn danger" id="vdel">Fotoğrafı kaldır</button><span class="vnav"><button class="btn ghost" id="vprev" aria-label="Önceki">‹</button><span id="vcount" class="small"></span><button class="btn ghost" id="vnext" aria-label="Sonraki">›</button></span><button class="btn" id="vclose">Kapat</button></div></div>
 <div id="toast" hidden></div>
 
 <script src="seed.js"></script>
@@ -391,11 +399,19 @@ details.morefields>.fgrid{margin-top:10px}
   }
   function openViewer(pid, strip){
     var d=PHC[pid]; if(!d){ toast('Fotoğraf bulunamadı'); return; }
-    viewer={pid:pid, strip:strip, confirm:false};
-    document.getElementById('vimg').src=d;
-    var vd=document.getElementById('vdel'); vd.hidden=!strip; vd.textContent='Fotoğrafı kaldır';
+    var ids=strip?(strip.getAttribute('data-ids')||'').split(',').filter(function(x){ return x && PHC[x]; }):[pid];
+    viewer={pid:pid, strip:strip, confirm:false, ids:ids};
+    showViewer();
     document.getElementById('viewer').hidden=false;
   }
+  function showViewer(){
+    var i=viewer.ids.indexOf(viewer.pid), n=viewer.ids.length;
+    document.getElementById('vimg').src=PHC[viewer.pid];
+    var vd=document.getElementById('vdel'); vd.hidden=!viewer.strip; vd.textContent='Fotoğrafı kaldır'; viewer.confirm=false;
+    document.querySelector('#viewer .vnav').hidden=n<2;
+    document.getElementById('vcount').textContent=n>1?(i+1)+' / '+n:'';
+  }
+  function stepViewer(k){ if(!viewer||viewer.ids.length<2) return; var i=viewer.ids.indexOf(viewer.pid), n=viewer.ids.length; viewer.pid=viewer.ids[(i+k+n)%n]; showViewer(); }
   function closeViewer(){ viewer=null; document.getElementById('viewer').hidden=true; document.getElementById('vimg').removeAttribute('src'); }
 
   // ---------- Form şemaları ----------
@@ -576,15 +592,17 @@ details.morefields>.fgrid{margin-top:10px}
     var h='<li class="item'+(t.done?' done':'')+'" id="task-'+t.id+'"><div class="iline"><input type="checkbox" data-done="'+t.id+'"'+(t.done?' checked':'')+' aria-label="Tamamlandı">'+
       '<div class="ibody click" data-open="'+t.id+'"><span class="ttl">'+esc(t.title)+'</span><span class="meta">'+whoTag(t.who)+
       (t.due?'<span class="'+(late?'late':'')+'">'+fd(t.due)+(late?' · gecikti':'')+'</span>':'')+
-      (t.note?'<span>✎ '+esc(t.note.length>60?t.note.slice(0,60)+'…':t.note)+'</span>':'')+photoCount(t)+'</span></div>'+
+      (t.note?'<span>✎ '+esc(t.note.length>60?t.note.slice(0,60)+'…':t.note)+'</span>':'')+'</span></div>'+
+      '<label class="camb" aria-label="Fotoğraf ekle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><input type="file" accept="image/*" multiple class="vh" data-phadd="tasks:'+t.id+'"></label>'+
       '<button class="star" data-star="'+t.id+'" aria-pressed="'+!!t.important+'" aria-label="Önemli">'+(t.important?'★':'☆')+'</button></div>';
+    if(!o && (t.photos||[]).length) h+='<div class="tphotos">'+photoStrip(t.photos,'tasks:'+t.id,false)+'</div>';
     if(o) h+='<div class="detail"><label class="field wide">İş<input id="tt-'+t.id+'" data-tf="title" data-t="'+t.id+'" value="'+esc(t.title)+'"></label>'+
       '<div class="fgrid"><label class="field">Kim yapacak (isteğe bağlı)<select id="tw-'+t.id+'" data-tf="who" data-t="'+t.id+'">'+whoOpts(t.who)+'</select></label>'+
       '<label class="field">Etkinlik<select id="te-'+t.id+'" data-tf="event" data-t="'+t.id+'">'+planEvents().map(function(e){ return '<option value="'+e.id+'"'+(e.id===t.event?' selected':'')+'>'+esc(e.name)+'</option>'; }).join('')+'</select></label>'+
       '<label class="field">Tarih (isteğe bağlı)<input type="date" id="td-'+t.id+'" data-tf="due" data-t="'+t.id+'" value="'+esc(t.due||'')+'"></label>'+
       '<label class="field check"><input type="checkbox" id="ti-'+t.id+'" data-tf="important" data-t="'+t.id+'"'+(t.important?' checked':'')+'>Önemli (Bugün\'de görünür)</label></div>'+
       '<label class="field wide">Notlar (fiyat, kiminle konuşuldu, ne karar verildi…)<textarea id="tn-'+t.id+'" data-tf="note" data-t="'+t.id+'">'+esc(t.note||'')+'</textarea></label>'+
-      '<div class="field wide"><span>Fotoğraflar</span>'+photoStrip(t.photos,'tasks:'+t.id,true)+'</div>'+
+      '<div class="field wide"><span>Fotoğraflar (birden fazla seçebilirsiniz)</span>'+photoStrip(t.photos,'tasks:'+t.id,true)+'</div>'+
       '<div class="row">'+(t.due?'<button type="button" class="btn link small" data-cleardue="'+t.id+'">Tarihi kaldır</button>':'')+calBtn('task',t.id)+'<span class="spacer"></span>'+delBtn('tasks:'+t.id,'İşi sil')+'</div><p class="small muted">Değişiklikler kendiliğinden kaydedilir.</p></div>';
     return h+'</li>';
   }
@@ -605,7 +623,7 @@ details.morefields>.fgrid{margin-top:10px}
     if(V.planView==='akis') return h+renderAkis(ev);
     var who=L('who');
     h+='<form class="box addbar" data-addtask="'+ev.id+'"><input class="inp" id="nt" placeholder="Yeni iş yazın…" aria-label="Yeni iş" autocomplete="off">'+
-      '<div class="row"><select class="inp" id="nw" aria-label="Kim yapacak (isteğe bağlı)" style="flex:1">'+whoOpts('')+'</select><button class="btn">Ekle</button></div>'+
+      '<div class="row"><select class="inp" id="nw" aria-label="Kim yapacak (isteğe bağlı)" style="flex:1">'+whoOpts('')+'</select><button class="btn">Ekle</button></div>'+photoStrip([],'form',true)+
       '<details class="morefields"><summary>Tarih ya da önem ekle <span class="muted">(isteğe bağlı)</span></summary><div class="fgrid"><label class="field">Tarih<input type="date" id="nd"></label><label class="field check"><input type="checkbox" id="ni">Önemli ★</label></div></details></form>';
     var whos=who.filter(function(w){ return st.some(function(t){ return t.who===w; }); });
     if(V.whoF!=='Hepsi' && whos.indexOf(V.whoF)<0) V.whoF='Hepsi';
@@ -951,7 +969,12 @@ details.morefields>.fgrid{margin-top:10px}
   document.getElementById('vclose').addEventListener('click', closeViewer);
   document.getElementById('viewer').addEventListener('click', function(e){ if(e.target.id==='viewer' || e.target.classList.contains('vimg')) closeViewer(); });
   document.getElementById('vdel').addEventListener('click', function(){ if(!viewer) return; if(!viewer.confirm){ viewer.confirm=true; this.textContent='Emin misiniz? Tekrar dokunun'; return; } removePhoto(viewer.pid); closeViewer(); });
-  document.addEventListener('keydown', function(e){ if(e.key==='Escape' && viewer) closeViewer(); });
+  document.addEventListener('keydown', function(e){ if(!viewer) return; if(e.key==='Escape') closeViewer(); if(e.key==='ArrowLeft') stepViewer(-1); if(e.key==='ArrowRight') stepViewer(1); });
+  document.getElementById('vprev').addEventListener('click', function(){ stepViewer(-1); });
+  document.getElementById('vnext').addEventListener('click', function(){ stepViewer(1); });
+  (function(){ var x0=null, el=document.getElementById('viewer');
+    el.addEventListener('touchstart', function(e){ x0=e.touches.length===1?e.touches[0].clientX:null; }, {passive:true});
+    el.addEventListener('touchend', function(e){ if(x0===null) return; var dx=e.changedTouches[0].clientX-x0; x0=null; if(Math.abs(dx)>50) stepViewer(dx<0?1:-1); }, {passive:true}); })();
 
   document.addEventListener('click', function(e){
     var t=e.target.closest('button,[data-open],[data-goto],[data-paraev],[data-budget],[data-paraview]'); if(!t || t.closest('#tabbar') || t.closest('#viewer') || t.id==='searchbtn' || t.id==='searchclose') return;
@@ -1037,7 +1060,8 @@ details.morefields>.fgrid{margin-top:10px}
       payFor=null; upd('payments',pid,upd2).then(function(){ return col('expenses').add({item:pay.title+(vendorName(pay)&&pay.title.indexOf(vendorName(pay))<0?' ('+vendorName(pay)+')':''),amount:amt,event:pay.event,category:pay.category||'Diğer',paidBy:who,date:date,note:'Ödeme takibinden',paymentId:pid,createdAt:Date.now()}); }).then(function(){ toast('Ödeme kaydedildi, harcamalara da işlendi'); }); return; }
     if(f.hasAttribute('data-budgetform')){ var bid=g('data-budgetform'); budgetEdit=null; upd('events',bid,{budget:Number(document.getElementById('bf').value)||0},'Bütçe kaydedildi'); return; }
     if(f.hasAttribute('data-addtask')){ var ev=g('data-addtask'), title=document.getElementById('nt').value.trim(); if(!title){ toast('İşi yazın'); document.getElementById('nt').focus(); return; }
-      col('tasks').add({event:ev,title:title,who:document.getElementById('nw').value,due:document.getElementById('nd').value||'',important:document.getElementById('ni').checked,order:Date.now(),done:false,note:'',createdAt:Date.now()}).then(function(){toast('İş eklendi');});
+      var nps=f.querySelector('.phs[data-key="form"]'), nph=nps?(nps.getAttribute('data-ids')||'').split(',').filter(Boolean):[];
+      col('tasks').add({event:ev,title:title,photos:nph,who:document.getElementById('nw').value,due:document.getElementById('nd').value||'',important:document.getElementById('ni').checked,order:Date.now(),done:false,note:'',createdAt:Date.now()}).then(function(){toast('İş eklendi');});
       document.getElementById('nt').value=''; return; }
     if(f.hasAttribute('data-quickgift')){ var from=document.getElementById('qg-from').value.trim(); if(!from){ toast('Kimden olduğunu yazın'); document.getElementById('qg-from').focus(); return; }
       var qty=Number(document.getElementById('qg-qty').value)||0, type=V.qgType, gv={from:from, event:document.getElementById('qg-ev').value, type:type, qty:type==='Para'?'':(qty||''), value:type==='Para'?qty:0, detail:'', returned:false, createdAt:Date.now()};

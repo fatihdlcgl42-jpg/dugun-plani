@@ -52,6 +52,13 @@ window.MIGRATE = function(d){
     Object.keys(g6).forEach(function(id){ if(A[g6[id].side]) g6[id].side = A[g6[id].side]; });
     d.settings.meta.schema = 6;
   }
+  if(d.settings.meta.schema < 7){
+    // Sürüm 7: eski "Harcamalar sekmesi" adı "Para" oldu.
+    var T7 = {"Toplam bütçeyi belirle, Harcamalar sekmesine gir":"Toplam bütçeyi belirle, Para'ya gir","Bütçeyi konuş, Harcamalar sekmesine gir":"Bütçeyi konuş, Para'ya gir","Kalan ödemeleri planla (Harcamalar sekmesi)":"Kalan ödemeleri planla (Para → Ödemeler)"};
+    var tk7 = d.tasks || {};
+    Object.keys(tk7).forEach(function(id){ if(T7[tk7[id].title]) tk7[id].title = T7[tk7[id].title]; });
+    d.settings.meta.schema = 7;
+  }
   return d;
 };
 function v2(d){
