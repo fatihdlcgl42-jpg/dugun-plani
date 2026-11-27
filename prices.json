@@ -1,28 +1,28 @@
 {
   "source": "Truncgil Finans",
-  "sourceUrl": "https://finans.truncgil.com/v4/today.json",
-  "sourceDate": "2026-11-27T08:02:01+03:00",
-  "updated": "2026-11-27T05:02:42+00:00",
+  "sourceUrl": "https://finance.truncgil.com/api/today.json",
+  "sourceDate": "2026-11-27T18:04:02+03:00",
+  "updated": "2026-11-27T15:04:06+00:00",
   "items": {
     "ceyrek": {
-      "buy": 9985.0,
-      "sell": 10229.0
+      "buy": 9885.0,
+      "sell": 10158.0
     },
     "yarim": {
-      "buy": 19969.0,
-      "sell": 20458.0
+      "buy": 19771.0,
+      "sell": 20316.0
     },
     "tam": {
-      "buy": 39816.0,
-      "sell": 40609.0
+      "buy": 39420.0,
+      "sell": 40203.0
     },
     "gram": {
-      "buy": 5934.82,
-      "sell": 5935.8
+      "buy": 5940.36,
+      "sell": 5941.37
     },
     "bilezik22": {
-      "buy": 5572.18,
-      "sell": 5769.53
+      "buy": 5516.67,
+      "sell": 5729.01
     }
   }
 }
